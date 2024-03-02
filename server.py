@@ -55,7 +55,7 @@ def check_password(username):
     else:
         return None  # Возвращаем None, если пользователя не существует
 
-import sqlite3
+
 
 def create_multiple_users():
     users = [
@@ -85,19 +85,9 @@ def add_code(username, password, code):
     conn.commit()
     conn.close()
 
-def suser_update(username):
-    conn = sqlite3.connect('users.db')
-    c = conn.cursor()
-    c.execute("UPDATE users SET susername=? WHERE username=?", (username, username,))
-    conn.commit()
-    conn.close()
 
-def spassword_update(password):
-    conn = sqlite3.connect('users.db')
-    c = conn.cursor()
-    c.execute("UPDATE users SET spassword=? WHERE password=?", (password, password,))
-    conn.commit()
-    conn.close()
+
+
 
 def get_code(username):
     conn = sqlite3.connect('users.db')
@@ -141,8 +131,11 @@ def index():
     if login_form.validate_on_submit():
         username = login_form.username.data
         password = login_form.password.data
-        if username == user_exists(username) and password == check_password(password):
-
+        print(username)
+        print(password)
+        existing_username = user_exists(username)  # Получаем логин пользователя из базы данных
+        existing_password = check_password(username)  # Получаем пароль пользователя из базы данных
+        if existing_username and password == existing_password:  # Проверяем введенные данные
             return redirect(url_for('generate_qr', username=username, password=password))
         else:
             return "Invalid credentials! Please try again."
@@ -157,7 +150,7 @@ def generate_qr():
         session['password'] = password
         qr_code = random.randint(100000, 999999)  # 6-digit OTP
         session['otp'] = qr_code  # Сохраняем код в сессии
-        add_code(username, password, qr_code)
+        add_code(username, password, qr_code)  # Добавляем код в базу данных
     else:
         username = session.get('username')
         password = session.get('password')
