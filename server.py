@@ -6,6 +6,94 @@ import random
 import qrcode
 from io import BytesIO
 import base64
+import sqlite3
+
+# Функция для создания базы данных, если она не существует
+def create_database():
+    conn = sqlite3.connect('users.db')
+    c = conn.cursor()
+    c.execute('''CREATE TABLE IF NOT EXISTS users
+                 (id INTEGER PRIMARY KEY, username TEXT, password TEXT, code INTEGER, susername TEXT, spassword TEXT)''')
+    conn.commit()
+    conn.close()
+
+# Функция для создания нового пользователя
+def create_user(username, password):
+    conn = sqlite3.connect('users.db')
+    c = conn.cursor()
+    try:
+        c.execute("INSERT INTO users (username, password) VALUES (?, ?)", (username, password))
+        conn.commit()
+        conn.close()
+        return True
+    except sqlite3.IntegrityError:
+        # Возникает, если пользователь с таким именем уже существует
+        conn.close()
+        return False
+
+# Функция для проверки существования пользователя
+def user_exists(username):
+    conn = sqlite3.connect('users.db')
+    c = conn.cursor()
+    c.execute("SELECT * FROM users WHERE username=?", (username,))
+    result = c.fetchone()
+    conn.close()
+    if result:
+        return result[1]  # Возвращаем только логин
+    else:
+        return None  # Возвращаем None, если пользователя не существует
+
+# Функция для проверки пароля у существующего пользователя
+def check_password(username):
+    conn = sqlite3.connect('users.db')
+    c = conn.cursor()
+    c.execute("SELECT password FROM users WHERE username=?", (username,))
+    result = c.fetchone()
+    conn.close()
+    if result:
+        return result[0]  # Возвращаем только пароль
+    else:
+        return None  # Возвращаем None, если пользователя не существует
+
+def add_code(username, password, code):
+    conn = sqlite3.connect('users.db')
+    c = conn.cursor()
+    c.execute("UPDATE users SET code=? WHERE username=? AND password=?", (code, username, password))
+    conn.commit()
+    conn.close()
+
+def suser_update(username):
+    conn = sqlite3.connect('users.db')
+    c = conn.cursor()
+    c.execute("UPDATE users SET susername=? WHERE username=?", (username, username,))
+    conn.commit()
+    conn.close()
+
+def spassword_update(password):
+    conn = sqlite3.connect('users.db')
+    c = conn.cursor()
+    c.execute("UPDATE users SET spassword=? WHERE password=?", (password, password,))
+    conn.commit()
+    conn.close()
+
+def get_code(username):
+    conn = sqlite3.connect('users.db')
+    c = conn.cursor()
+    c.execute("SELECT code FROM users WHERE username=?", (username,))
+    result = c.fetchone()
+    conn.close()
+    if result:
+        return str(result[0])  # Преобразуем код в строку
+    else:
+        return None
+
+# Функция для удаления кода у пользователя
+def delete_code(username):
+    conn = sqlite3.connect('users.db')
+    c = conn.cursor()
+    c.execute("UPDATE users SET code=NULL WHERE username=?", (username,))
+    conn.commit()
+    conn.close()
 
 app = Flask(__name__)
 app.config['SECRET_KEY'] = 'your_secret_key'
@@ -19,9 +107,9 @@ class OTPForm(FlaskForm):
     otp = StringField('OTP', validators=[DataRequired(), Length(min=6, max=6)])
     submit = SubmitField('Submit')
 
-    def validate_otp(self, field):
-        if field.data != session.get('otp_code'):
-            raise ValidationError('Invalid OTP code')
+    # def validate_otp(self, field):
+    #     if field.data != session.get('otp_code'):
+    #         raise ValidationError('Invalid OTP code')
 
 @app.route('/', methods=['GET', 'POST'])
 def index():
@@ -30,21 +118,30 @@ def index():
     if login_form.validate_on_submit():
         username = login_form.username.data
         password = login_form.password.data
-        if username == '1' and password == '1':
-            return redirect(url_for('generate_qr'))
+        if username == user_exists(username) and password == check_password(password):
+
+            return redirect(url_for('generate_qr', username=username, password=password))
         else:
             return "Invalid credentials! Please try again."
     return render_template('login.html', login_form=login_form, otp_form=None)
 
 @app.route('/generate_qr', methods=['GET', 'POST'])
 def generate_qr():
-    if 'otp_code' not in session:
-        qr_code = str(random.randint(100000, 999999))  # 9-digit OTP
-        session['otp_code'] = qr_code  # Save OTP code in session
+    if request.method == 'GET':
+        username = request.args.get('username')
+        password = request.args.get('password')
+        session['username'] = username
+        session['password'] = password
+        qr_code = random.randint(100000, 999999)  # 6-digit OTP
+        session['otp'] = qr_code  # Сохраняем код в сессии
+        add_code(username, password, qr_code)
     else:
-        qr_code = session['otp_code']
+        username = session.get('username')
+        password = session.get('password')
 
-    qr = qrcode.make(qr_code)
+    qr_code = session.get('otp')  # Используем сохраненный код из сессии
+
+    qr = qrcode.make(str(qr_code))
     img_io = BytesIO()
     qr.save(img_io, 'PNG')
     img_io.seek(0)
@@ -54,7 +151,8 @@ def generate_qr():
     otp_form = OTPForm()
 
     if request.method == 'POST' and otp_form.validate_on_submit():
-        if otp_form.otp.data == session.get('otp_code'):
+        if otp_form.otp.data == str(qr_code):
+            delete_code(username)
             return redirect(url_for('success'))  # Redirect to success page
         else:
             return redirect(url_for('error'))    # Redirect to error page
@@ -70,4 +168,5 @@ def error():
     return render_template('error.html')
 
 if __name__ == '__main__':
+    create_database()
     app.run(debug=True)
