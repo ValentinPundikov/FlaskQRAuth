@@ -63,7 +63,8 @@ def create_multiple_users():
         ("user2", "password2"),
         ("user3", "password3"),
         ("user4", "password4"),
-        ("user5", "password5")
+        ("user5", "password5"),
+        ("user6", "password6")
     ]
     conn = sqlite3.connect('users.db')
     c = conn.cursor()
