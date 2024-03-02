@@ -55,6 +55,28 @@ def check_password(username):
     else:
         return None  # Возвращаем None, если пользователя не существует
 
+import sqlite3
+
+def create_multiple_users():
+    users = [
+        ("user1", "password1"),
+        ("user2", "password2"),
+        ("user3", "password3"),
+        ("user4", "password4"),
+        ("user5", "password5")
+    ]
+    conn = sqlite3.connect('users.db')
+    c = conn.cursor()
+    for username, password in users:
+        # Проверяем, существует ли пользователь с таким именем
+        c.execute("SELECT * FROM users WHERE username=?", (username,))
+        existing_user = c.fetchone()
+        if not existing_user:
+            # Если пользователь не существует, добавляем его в базу данных
+            c.execute("INSERT INTO users (username, password) VALUES (?, ?)", (username, password))
+    conn.commit()
+    conn.close()
+
 def add_code(username, password, code):
     conn = sqlite3.connect('users.db')
     c = conn.cursor()
@@ -169,4 +191,5 @@ def error():
 
 if __name__ == '__main__':
     create_database()
+    create_multiple_users()
     app.run(debug=True)
